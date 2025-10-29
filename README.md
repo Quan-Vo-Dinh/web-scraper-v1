@@ -33,6 +33,14 @@
 
 ---
 
+## 📝 Lưu ý:
+
+### Lưu ý: Tool được deploy lên nền tảng miễn phí (Vercel), vì vậy có một số giới hạn cần lưu ý:
+
+- **Thời gian xử lý:** Các tác vụ có thể bị giới hạn về thời gian xử lý, vì vậy hãy đảm bảo rằng các tác vụ crawl của bạn không mất quá nhiều thời gian.
+- **Giới hạn tài nguyên:** Tài nguyên (CPU, RAM) có thể bị giới hạn, ảnh hưởng đến hiệu suất của các tác vụ crawl.
+- **Khuyến nghị**: Nên clone repository và chạy local để tránh các giới hạn này khi thực hiện các tác vụ crawl lớn.
+
 ## 🚀 Getting Started
 
 ### 1. Cài đặt
@@ -70,6 +78,8 @@ Sau khi đã có file `.env.local`, khởi động server development:
 ```bash
 $ pnpm dev
 ```
+
+. Cấu hình Môi trường (Local Development)
 
 Ứng dụng sẽ chạy tại `http://localhost:3000`.
 
