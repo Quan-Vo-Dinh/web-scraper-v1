@@ -1,26 +1,18 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { getJob } from "@/lib/jobs";
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ jobId: string }> }
-) {
+export async function GET(request: Request, context: any) {
   try {
-    const { jobId } = await params;
+    const { jobId } = await context.params; // Correctly access jobId from destructured params
+    const job = await getJob(jobId);
 
-    // Forward request to backend server
-    const backendUrl =
-      process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
-    const response = await fetch(`${backendUrl}/api/crawl/status/${jobId}`);
-
-    if (!response.ok) {
-      const error = await response.json();
-      return NextResponse.json(error, { status: response.status });
+    if (!job) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
-    const data = await response.json();
-    return NextResponse.json(data);
+    return NextResponse.json(job);
   } catch (error) {
-    console.error("[API Error] GET /api/crawl/status:", error);
+    console.error(`[API Error] GET /api/crawl/status:`, error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

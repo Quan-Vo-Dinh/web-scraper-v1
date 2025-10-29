@@ -5,9 +5,8 @@
   "scripts": {
     "build": "next build",
     "dev": "next dev",
-    "server": "ts-node --project tsconfig.server.json server.ts",
-    "start": "next start",
-    "dev:all": "concurrently \"pnpm server\" \"pnpm dev\""
+    "start": "next start"
+
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -18,6 +17,8 @@
     "@shadcn/ui": "latest",
     "@tailwindcss/postcss": "^4.1.16",
     "@vercel/analytics": "^1.5.0",
+    "@vercel/blob": "^2.0.0",
+    "@vercel/kv": "^3.0.0",
     "axios": "latest",
     "bufferutil": "latest",
     "class-variance-authority": "^0.7.1",

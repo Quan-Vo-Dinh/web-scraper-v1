@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -37,12 +37,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
+// Updated JobStatus interface to match the new API response
 interface JobStatus {
   jobId: string;
   status: "pending" | "crawling" | "completed" | "error";
   progress: { crawled: number; total: number };
   message?: string;
-  filePath?: string;
+  resultUrl?: string; // This is new
 }
 
 interface CategoryOption {
@@ -70,126 +71,124 @@ const categories: {
   ],
 };
 
-// Simple CSV parser
+// Simple CSV parser (remains unchanged)
 const parseCSV = (text: string) => {
   const lines = text.trim().split("\n");
-  const headers = lines[0].split(",");
-  const rows = lines.slice(1).map((line) => line.split(","));
+  const headers = lines[0].split(",").map((h) => h.replace(/\"/g, ""));
+  const rows = lines
+    .slice(1)
+    .map((line) => line.split(",").map((c) => c.replace(/\"/g, "")));
   return { headers, rows };
 };
 
 export default function Home() {
+  // UI State (remains unchanged)
   const [site, setSite] = useState<"cellphones" | "gearvn">("cellphones");
   const [selectedCategoryValue, setSelectedCategoryValue] =
     useState<string>("");
   const [limit, setLimit] = useState(100);
+
+  // Refactored State for Job Management
   const [jobId, setJobId] = useState<string | null>(null);
-  const [status, setStatus] = useState<
-    "idle" | "pending" | "crawling" | "completed" | "error"
-  >("idle");
-  const [progress, setProgress] = useState({ crawled: 0, total: 0 });
+  const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // CSV Viewer State (remains unchanged)
   const [csvData, setCsvData] = useState<{
     headers: string[];
     rows: string[][];
   } | null>(null);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
 
   const currentCategoryOptions = categories[site] || [];
 
+  // Effect to reset category on site change (remains unchanged)
   useEffect(() => {
-    setSelectedCategoryValue("");
-  }, [site]);
+    setSelectedCategoryValue(currentCategoryOptions[0]?.value || "");
+  }, [site, currentCategoryOptions]);
 
+  // --- NEW: Polling Logic ---
   useEffect(() => {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "localhost:3001";
-    const protocol = backendUrl.startsWith("https") ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${backendUrl.replace(/^https?:\/\//, "")}`;
-    wsRef.current = new WebSocket(wsUrl);
-    wsRef.current.onopen = () => console.log("[WebSocket] Connected");
-    wsRef.current.onerror = (error) =>
-      console.error("[WebSocket] Error:", error);
-    return () => wsRef.current?.close();
-  }, []);
+    if (
+      !jobId ||
+      jobStatus?.status === "completed" ||
+      jobStatus?.status === "error"
+    ) {
+      setIsLoading(false);
+      return;
+    }
 
-  useEffect(() => {
-    if (!wsRef.current) return;
-    const handleMessage = (event: MessageEvent) => {
+    const pollStatus = async () => {
       try {
-        const data: JobStatus = JSON.parse(event.data);
-        if (data.jobId === jobId) {
-          setStatus(data.status);
-          setProgress(data.progress);
-          if (data.message) {
-            setLogs((prev) => [
-              ...prev,
-              `[${new Date().toLocaleTimeString()}] ${data.message}`,
-            ]);
+        const response = await fetch(`/api/crawl/status/${jobId}`);
+        if (response.ok) {
+          const data: JobStatus = await response.json();
+          setJobStatus(data);
+
+          // Update logs with the latest message from the job
+          const latestMessage = `[${new Date().toLocaleTimeString()}] ${
+            data.message
+          }`;
+          if (data.message && !logs.includes(latestMessage)) {
+            setLogs((prev) => [...prev, latestMessage]);
+          }
+
+          if (data.status === "completed" || data.status === "error") {
+            setIsLoading(false);
           }
         }
       } catch (error) {
-        console.error("[WebSocket] Error parsing message:", error);
+        console.error("Polling error:", error);
+        setIsLoading(false); // Stop on polling failure
       }
     };
-    wsRef.current.addEventListener("message", handleMessage);
-    return () => wsRef.current?.removeEventListener("message", handleMessage);
-  }, [jobId]);
 
+    const intervalId = setInterval(pollStatus, 3000); // Poll every 3 seconds
+
+    return () => clearInterval(intervalId); // Cleanup interval
+  }, [jobId, jobStatus, logs]);
+
+  // --- REFACTORED: Event Handlers ---
   const handleStartCrawling = async () => {
     if (!selectedCategoryValue) {
       alert("Please select a product category");
       return;
     }
+
+    setIsLoading(true);
+    setLogs([]);
+    setCsvData(null);
+    setJobStatus(null);
+    setJobId(null);
+
     try {
-      setLogs([]);
-      setCsvData(null);
-      setProgress({ crawled: 0, total: limit });
-      setStatus("crawling");
       const response = await fetch("/api/crawl", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ site, target: selectedCategoryValue, limit }),
       });
-      if (!response.ok) throw new Error("Failed to start crawl");
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || "Failed to start crawl job");
+      }
+
       const data = await response.json();
       setJobId(data.jobId);
       setLogs((prev) => [
         ...prev,
         `[${new Date().toLocaleTimeString()}] Job started: ${data.jobId}`,
       ]);
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ jobId: data.jobId }));
-      }
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       console.error("[Error] Start crawling:", error);
-      setStatus("error");
       setLogs((prev) => [
         ...prev,
-        `[${new Date().toLocaleTimeString()}] Error: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
+        `[${new Date().toLocaleTimeString()}] Error: ${errorMessage}`,
       ]);
-    }
-  };
-
-  const handleDownloadCSV = async () => {
-    if (!jobId) return;
-    try {
-      const response = await fetch(`/api/crawl/download/${jobId}`);
-      if (!response.ok) throw new Error("Failed to download file");
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `crawl-${jobId}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error("[Error] Download CSV:", error);
-      alert("Failed to download CSV file");
+      setIsLoading(false);
     }
   };
 
@@ -197,7 +196,8 @@ export default function Home() {
     if (!jobId) return;
     try {
       const response = await fetch(`/api/crawl/download/${jobId}`);
-      if (!response.ok) throw new Error("Could not fetch CSV data.");
+      if (!response.ok)
+        throw new Error("Could not fetch CSV data for viewing.");
       const text = await response.text();
       const parsedData = parseCSV(text);
       setCsvData(parsedData);
@@ -208,15 +208,19 @@ export default function Home() {
     }
   };
 
+  // --- Derived State for UI ---
+  const currentStatus = jobStatus?.status || (isLoading ? "pending" : "idle");
+  const progress = jobStatus?.progress || { crawled: 0, total: limit };
   const progressPercentage =
     progress.total > 0 ? (progress.crawled / progress.total) * 100 : 0;
 
+  // --- UI RENDER (Unchanged Structure) ---
   return (
     <main className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="text-center space-y-2 mb-8">
           <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-            Web Scraper Pro
+            EC312.Q12 - LAB03 WebScraper Control Panel
           </h1>
           <p className="text-muted-foreground text-lg">
             Thu thập dữ liệu sản phẩm từ CellphoneS & GearVN
@@ -232,30 +236,30 @@ export default function Home() {
                     Trạng thái
                   </p>
                   <p className="text-2xl font-bold">
-                    {status === "idle" && (
+                    {currentStatus === "idle" && (
                       <span className="text-muted-foreground">Chờ</span>
                     )}
-                    {status === "pending" && (
+                    {currentStatus === "pending" && (
                       <span className="text-blue-500">Chuẩn bị</span>
                     )}
-                    {status === "crawling" && (
+                    {currentStatus === "crawling" && (
                       <span className="text-blue-500">Crawling</span>
                     )}
-                    {status === "completed" && (
+                    {currentStatus === "completed" && (
                       <span className="text-green-500">Hoàn thành</span>
                     )}
-                    {status === "error" && (
+                    {currentStatus === "error" && (
                       <span className="text-red-500">Lỗi</span>
                     )}
                   </p>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                   <span className="text-2xl">
-                    {status === "idle" && "⏸️"}
-                    {status === "pending" && "⏳"}
-                    {status === "crawling" && "🔄"}
-                    {status === "completed" && "✅"}
-                    {status === "error" && "❌"}
+                    {currentStatus === "idle" && "⏸️"}
+                    {currentStatus === "pending" && "⏳"}
+                    {currentStatus === "crawling" && "🔄"}
+                    {currentStatus === "completed" && "✅"}
+                    {currentStatus === "error" && "❌"}
                   </span>
                 </div>
               </div>
@@ -314,7 +318,7 @@ export default function Home() {
                 <Select
                   value={site}
                   onValueChange={(value: any) => setSite(value)}
-                  disabled={status === "crawling"}
+                  disabled={isLoading}
                 >
                   <SelectTrigger id="site">
                     <SelectValue placeholder="Chọn trang web..." />
@@ -330,7 +334,7 @@ export default function Home() {
                 <Select
                   value={selectedCategoryValue}
                   onValueChange={setSelectedCategoryValue}
-                  disabled={status === "crawling"}
+                  disabled={isLoading}
                 >
                   <SelectTrigger id="category">
                     <SelectValue placeholder="Chọn danh mục..." />
@@ -360,7 +364,7 @@ export default function Home() {
                       Math.max(10, Number.parseInt(e.target.value) || 10)
                     )
                   }
-                  disabled={status === "crawling"}
+                  disabled={isLoading}
                 />
                 <p className="text-xs text-muted-foreground">
                   ⚡ Tối thiểu 10, tối đa 1000 sản phẩm (có thể tăng nếu cần).
@@ -369,11 +373,11 @@ export default function Home() {
               <div className="pt-4 space-y-2">
                 <Button
                   onClick={handleStartCrawling}
-                  disabled={status === "crawling" || !selectedCategoryValue}
+                  disabled={isLoading || !selectedCategoryValue}
                   className="w-full h-12 text-base font-semibold"
                   size="lg"
                 >
-                  {status === "crawling" ? (
+                  {isLoading ? (
                     <>
                       <span className="animate-spin mr-2">⚙️</span>Đang crawl...
                     </>
@@ -383,15 +387,17 @@ export default function Home() {
                     </>
                   )}
                 </Button>
-                {status === "completed" && (
+                {currentStatus === "completed" && (
                   <div className="grid grid-cols-2 gap-2">
                     <Button
-                      onClick={handleDownloadCSV}
+                      asChild
                       variant="outline"
                       className="w-full h-12 text-base font-semibold border-2"
                       size="lg"
                     >
-                      <span className="mr-2">💾</span>Tải xuống CSV
+                      <a href={`/api/crawl/download/${jobId}`} download>
+                        <span className="mr-2">💾</span>Tải xuống CSV
+                      </a>
                     </Button>
                     <Button
                       onClick={handleViewData}
@@ -413,7 +419,7 @@ export default function Home() {
                 <span>📈</span>Tiến trình & Logs
               </CardTitle>
               <CardDescription>
-                Theo dõi quá trình thu thập dữ liệu real-time
+                Theo dõi quá trình thu thập dữ liệu
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -481,9 +487,9 @@ export default function Home() {
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground">
-                  Real-time
+                  Cập nhật
                 </p>
-                <p className="text-lg font-semibold">WebSocket</p>
+                <p className="text-lg font-semibold">API Polling</p>
               </div>
             </div>
           </CardContent>
@@ -491,52 +497,61 @@ export default function Home() {
       </div>
 
       <Dialog open={isViewerOpen} onOpenChange={setIsViewerOpen}>
-        <DialogContent className="max-w-screen-2xl">
+        <DialogContent className="!max-w-[90vw] !w-[90vw] h-[80vh] p-6 flex flex-col">
           <DialogHeader>
             <DialogTitle>Xem trước dữ liệu CSV</DialogTitle>
           </DialogHeader>
-          <div className="relative h-[70vh] overflow-auto border rounded-md">
-            <Table>
-              <TableHeader className="sticky top-0 bg-background z-10">
-                {csvData?.headers && (
-                  <TableRow>
-                    {csvData.headers.map((header) => (
-                      <TableHead key={header} className="whitespace-nowrap">
-                        {header}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                )}
-              </TableHeader>
-              <TableBody>
-                {csvData?.rows && csvData.rows.length > 0 ? (
-                  csvData.rows.map((row, rowIndex) => (
-                    <TableRow key={rowIndex}>
-                      {row.map((cell, cellIndex) => (
-                        <TableCell
-                          key={cellIndex}
-                          className="max-w-[400px] truncate whitespace-nowrap"
-                          title={cell}
+
+          {/* Bảng scroll cả 2 chiều */}
+          <div className="flex-1 overflow-auto border rounded-md mt-4">
+            <div className="min-w-max">
+              <Table className="table-auto">
+                <TableHeader className="sticky top-0 bg-background z-10">
+                  {csvData?.headers && (
+                    <TableRow>
+                      {csvData.headers.map((header) => (
+                        <TableHead
+                          key={header}
+                          className="whitespace-nowrap text-sm font-medium border-b px-4 py-2"
                         >
-                          {cell}
-                        </TableCell>
+                          {header}
+                        </TableHead>
                       ))}
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={csvData?.headers.length || 1}
-                      className="h-24 text-center"
-                    >
-                      Không có dữ liệu để hiển thị.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                  )}
+                </TableHeader>
+
+                <TableBody>
+                  {csvData?.rows && csvData.rows.length > 0 ? (
+                    csvData.rows.map((row, rowIndex) => (
+                      <TableRow key={rowIndex}>
+                        {row.map((cell, cellIndex) => (
+                          <TableCell
+                            key={cellIndex}
+                            className="px-4 py-2 align-top text-sm border-b whitespace-nowrap"
+                            title={cell}
+                          >
+                            {cell}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell
+                        colSpan={csvData?.headers.length || 1}
+                        className="h-24 text-center"
+                      >
+                        Không có dữ liệu để hiển thị.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
-          <DialogFooter>
+
+          <DialogFooter className="mt-4">
             <Button onClick={() => setIsViewerOpen(false)}>Đóng</Button>
           </DialogFooter>
         </DialogContent>
