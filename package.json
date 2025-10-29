@@ -1,0 +1,43 @@
+{
+  "name": "web-scraper",
+  "version": "1.0.0",
+  "description": "Web scraper for e-commerce sites",
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev",
+    "server": "ts-node server.ts",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@shadcn/ui": "latest",
+    "axios": "latest",
+    "bufferutil": "latest",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "express": "latest",
+    "fs": "latest",
+    "http": "latest",
+    "json2csv": "latest",
+    "lucide-react": "^0.454.0",
+    "next": "^16.0.0",
+    "path": "latest",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^2.5.5",
+    "tailwindcss": "^4.1.9",
+    "tailwindcss-animate": "^1.0.7",
+    "utf-8-validate": "latest",
+    "uuid": "latest",
+    "ws": "latest"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.0",
+    "@types/node": "^22",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "@types/ws": "^8.5.0",
+    "postcss": "^8.5",
+    "ts-node": "^10.9.0",
+    "typescript": "^5"
+  }
+}
