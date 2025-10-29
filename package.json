@@ -5,11 +5,19 @@
   "scripts": {
     "build": "next build",
     "dev": "next dev",
-    "server": "ts-node server.ts",
-    "start": "next start"
+    "server": "ts-node --project tsconfig.server.json server.ts",
+    "start": "next start",
+    "dev:all": "concurrently \"pnpm server\" \"pnpm dev\""
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-label": "^2.1.7",
+    "@radix-ui/react-progress": "^1.1.7",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-slot": "^1.2.3",
     "@shadcn/ui": "latest",
+    "@tailwindcss/postcss": "^4.1.16",
+    "@vercel/analytics": "^1.5.0",
     "axios": "latest",
     "bufferutil": "latest",
     "class-variance-authority": "^0.7.1",
@@ -17,6 +25,7 @@
     "express": "latest",
     "fs": "latest",
     "http": "latest",
+    "json-2-csv": "^5.5.10",
     "json2csv": "latest",
     "lucide-react": "^0.454.0",
     "next": "^16.0.0",
@@ -24,20 +33,24 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwind-merge": "^2.5.5",
-    "tailwindcss": "^4.1.9",
     "tailwindcss-animate": "^1.0.7",
     "utf-8-validate": "latest",
     "uuid": "latest",
     "ws": "latest"
   },
   "devDependencies": {
+    "@radix-ui/react-scroll-area": "^1.2.10",
     "@types/express": "^4.17.0",
+    "@types/json2csv": "^5.0.7",
     "@types/node": "^22",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
+    "@types/uuid": "^11.0.0",
     "@types/ws": "^8.5.0",
+    "autoprefixer": "^10.4.21",
     "postcss": "^8.5",
+    "tailwindcss": "^3.4.18",
     "ts-node": "^10.9.0",
-    "typescript": "^5"
+    "typescript": "^5.7.2"
   }
 }
