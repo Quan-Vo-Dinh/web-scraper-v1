@@ -4,14 +4,16 @@ import { put } from "@vercel/blob";
 import { json2csv } from "json-2-csv";
 
 import { createJob, updateJob } from "@/lib/jobs";
-import {
-  cellphonesCrawler,
-  type Product,
-} from "@/services/cellphones-crawler";
+import { cellphonesCrawler, type Product } from "@/services/cellphones-crawler";
 import { gearvnCrawler } from "@/services/gearvn-crawler";
 
 // Helper function to run the crawl process in the background
-async function runCrawl(jobId: string, site: string, target: string, limit: number) {
+async function runCrawl(
+  jobId: string,
+  site: string,
+  target: string,
+  limit: number
+) {
   try {
     await updateJob(jobId, {
       status: "crawling",
@@ -43,9 +45,19 @@ async function runCrawl(jobId: string, site: string, target: string, limit: numb
     // Convert to CSV
     const csv = await json2csv(products, {
       keys: [
+        // === CÁC CỘT CÀI ĐẶT (HARDCODE) ===
+        { field: "type", title: "Type" },
+        { field: "published", title: "Published" },
+        { field: "visibility", title: "Visibility in catalog" },
+        { field: "shortDescription", title: "Short description" },
+        { field: "inStock", title: "In stock?" },
+        { field: "reviewsAllowed", title: "Allow customer reviews?" },
+        { field: "taxStatus", title: "Tax status" },
+
+        // === CÁC CỘT DATA (CÀO VỀ) ===
         { field: "sku", title: "SKU" },
         { field: "name", title: "Name" },
-        { field: "price", title: "Regular price" },
+        { field: "regular_price", title: "Regular price" },
         { field: "description", title: "Description" },
         { field: "category", title: "Categories" },
         { field: "imageUrl", title: "Images" },
@@ -64,12 +76,14 @@ async function runCrawl(jobId: string, site: string, target: string, limit: numb
       message: "Crawl completed successfully. File is ready for download.",
       resultUrl: blob.url,
     });
-
   } catch (error) {
     console.error(`[Job ${jobId}] Failed to run crawl:`, error);
     await updateJob(jobId, {
       status: "error",
-      message: error instanceof Error ? error.message : "An unknown error occurred during the crawl.",
+      message:
+        error instanceof Error
+          ? error.message
+          : "An unknown error occurred during the crawl.",
     });
   }
 }
@@ -91,10 +105,8 @@ export async function POST(request: NextRequest) {
     // Fire and forget the crawl process to run in the background
     runCrawl(jobId, site, target, limit);
 
-
     // Respond immediately with the jobId
     return NextResponse.json({ jobId });
-
   } catch (error) {
     console.error("[API Error] POST /api/crawl:", error);
     return NextResponse.json(

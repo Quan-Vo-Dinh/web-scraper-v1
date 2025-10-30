@@ -1,6 +1,6 @@
 import axios from "axios";
 import { updateJob } from "@/lib/jobs";
-import type { Product } from "./cellphones-crawler"; // Reuse Product interface
+import type { Product } from "./cellphones-crawler"; // Import interface đã sửa
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -17,12 +17,14 @@ export async function gearvnCrawler(
   collectionSlug: string,
   limit: number
 ): Promise<Product[]> {
-  const products: Product[] = [];
+  const products: Product[] = []; // Dùng interface Product đã cập nhật
   let page = 1;
   const pageSize = 50;
   const MAX_PAGES = Math.ceil(limit / pageSize);
 
-  console.log(`[Job ${jobId}] Starting GearVN crawl for collection: ${collectionSlug}`);
+  console.log(
+    `[Job ${jobId}] Starting GearVN crawl for collection: ${collectionSlug}`
+  );
 
   try {
     while (products.length < limit && page <= MAX_PAGES) {
@@ -42,11 +44,15 @@ export async function gearvnCrawler(
       const items = response.data?.products;
 
       if (!items || items.length === 0) {
-        console.log(`[Job ${jobId}] [Page ${page}] No more products found. Stopping.`);
+        console.log(
+          `[Job ${jobId}] [Page ${page}] No more products found. Stopping.`
+        );
         break;
       }
 
-      console.log(`[Job ${jobId}] [Page ${page}] Fetched ${items.length} items.`);
+      console.log(
+        `[Job ${jobId}] [Page ${page}] Fetched ${items.length} items.`
+      );
 
       for (const item of items) {
         if (products.length >= limit) break;
@@ -54,14 +60,27 @@ export async function gearvnCrawler(
         const firstVariant = item.variants?.[0];
         const priceStr = firstVariant?.price;
         const price = priceStr ? Number.parseFloat(priceStr) : 0;
+        const categoryName = item.product_type || collectionSlug;
 
         products.push({
+          // === Dữ liệu động ===
           sku: firstVariant?.sku || `GEARVN-${item.id}`,
           name: item.title || "",
-          price: price,
+          regular_price: price, // Đổi tên
           description: `Xem chi tiết: https://gearvn.com/products/${item.handle}`,
-          category: item.product_type || collectionSlug,
+          category: categoryName,
           imageUrl: item.image?.src || "",
+          shortDescription: `Hàng chính hãng từ ${
+            item.vendor || "GearVN"
+          }. Loại: ${categoryName}`,
+
+          // === Dữ liệu tĩnh (Hardcode) ===
+          type: "simple",
+          published: 1,
+          visibility: "visible",
+          inStock: 1,
+          reviewsAllowed: 1,
+          taxStatus: "taxable",
         });
       }
 
@@ -80,9 +99,10 @@ export async function gearvnCrawler(
       await sleep(1500); // Rate limiting
     }
 
-    console.log(`[Job ${jobId}] Finished crawling. Total products: ${products.length}`);
+    console.log(
+      `[Job ${jobId}] Finished crawling. Total products: ${products.length}`
+    );
     return products;
-
   } catch (error) {
     console.error(`[Job ${jobId}] [GearVNCrawler Error]:`, error);
     if (axios.isAxiosError(error) && error.response) {

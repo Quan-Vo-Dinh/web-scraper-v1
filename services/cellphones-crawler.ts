@@ -1,14 +1,23 @@
 import axios from "axios";
 import { updateJob } from "@/lib/jobs";
 
-// Interface for the product data structure
 export interface Product {
+  // === Dữ liệu động (Cào về) ===
   sku: string;
   name: string;
-  price: number;
+  regular_price: number;
   description: string;
   category: string;
   imageUrl: string;
+  shortDescription: string; // Thêm mô tả ngắn
+
+  // === Dữ liệu tĩnh (Hardcode) ===
+  type: string; // vd: 'simple'
+  published: number; // 1 = Published
+  visibility: string; // 'visible'
+  inStock: number; // 1 = In stock
+  reviewsAllowed: number; // 1 = Allow reviews
+  taxStatus: string; // 'taxable'
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -67,11 +76,13 @@ export async function cellphonesCrawler(
   categoryId: string | number,
   limit: number
 ): Promise<Product[]> {
-  const products: Product[] = [];
+  const products: Product[] = []; // Dùng interface Product đã cập nhật
   let page = 1;
   const pageSize = 30;
 
-  console.log(`[Job ${jobId}] Starting CellphoneS crawl for category: ${categoryId}`);
+  console.log(
+    `[Job ${jobId}] Starting CellphoneS crawl for category: ${categoryId}`
+  );
 
   try {
     while (products.length < limit) {
@@ -92,27 +103,46 @@ export async function cellphonesCrawler(
       const items = response.data?.data?.products;
 
       if (!items || items.length === 0) {
-        console.log(`[Job ${jobId}] [Page ${page}] No more products found. Stopping.`);
+        console.log(
+          `[Job ${jobId}] [Page ${page}] No more products found. Stopping.`
+        );
         break;
       }
 
-      console.log(`[Job ${jobId}] [Page ${page}] Fetched ${items.length} items.`);
+      console.log(
+        `[Job ${jobId}] [Page ${page}] Fetched ${items.length} items.`
+      );
 
       for (const item of items) {
         if (products.length >= limit) break;
 
         const productUrl = `https://cellphones.com.vn/${item.general.url_key}.html`;
         const imageUrl = item.filterable.thumbnail
-          ? `https://cdn2.cellphones.com.vn/x358,webp,q100/${item.filterable.thumbnail}`
+          ? `https://cdn2.cellphones.com.vn/x358,webp,q100/${
+              item.filterable.thumbnail.replace(/^\/+/, "") // Xóa dấu / ở đầu nếu có
+            }`
           : "";
+        const categoryName =
+          item.general.categories?.[0]?.name || categoryId.toString();
 
         products.push({
+          // === Dữ liệu động ===
           sku: item.general.sku || `CPS-${item.general.product_id}`,
           name: item.general.name || "",
-          price: item.filterable.special_price || item.filterable.price || 0,
+          regular_price:
+            item.filterable.special_price || item.filterable.price || 0,
           description: `Xem chi tiết: ${productUrl}`,
-          category: item.general.categories?.[0]?.name || categoryId.toString(),
+          category: categoryName,
           imageUrl: imageUrl,
+          shortDescription: `Hàng chính hãng. Danh mục: ${categoryName}`,
+
+          // === Dữ liệu tĩnh (Hardcode) ===
+          type: "simple",
+          published: 1,
+          visibility: "visible",
+          inStock: 1,
+          reviewsAllowed: 1,
+          taxStatus: "taxable",
         });
       }
 
@@ -126,9 +156,10 @@ export async function cellphonesCrawler(
       await sleep(1500); // Rate limiting
     }
 
-    console.log(`[Job ${jobId}] Finished crawling. Total products: ${products.length}`);
+    console.log(
+      `[Job ${jobId}] Finished crawling. Total products: ${products.length}`
+    );
     return products;
-    
   } catch (error) {
     console.error(`[Job ${jobId}] [CellphonesCrawler Error]:`, error);
     if (axios.isAxiosError(error) && error.response) {
